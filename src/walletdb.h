@@ -7,6 +7,7 @@
 #define BITCOIN_WALLETDB_H
 
 #include "db.h"
+#include "keystore.h"
 #include "base58.h"
 
 class CKeyPool;
@@ -191,6 +192,8 @@ public:
     bool ReadAccount(const std::string& strAccount, CAccount& account);
     bool WriteAccount(const std::string& strAccount, const CAccount& account);
     bool WriteAccountingEntry(const CAccountingEntry& acentry);
+    bool WriteWatchOnly(const CTxDestination &dest);
+    bool EraseWatchOnly(const CTxDestination &dest);
     int64 GetAccountCreditDebit(const std::string& strAccount);
     void ListAccountCreditDebit(const std::string& strAccount, std::list<CAccountingEntry>& acentries);
 

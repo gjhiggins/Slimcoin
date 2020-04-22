@@ -54,6 +54,18 @@ bool CWalletDB::WriteAccountingEntry(const CAccountingEntry& acentry)
     return Write(boost::make_tuple(string("acentry"), acentry.strAccount, ++nAccountingEntryNumber), acentry);
 }
 
+bool CWalletDB::WriteWatchOnly(const CTxDestination &dest)
+{
+        nWalletDBUpdated++;
+        return Write(std::make_pair(std::string("watch"), CBitcoinAddress(dest).ToString()), '1');
+}
+
+bool CWalletDB::EraseWatchOnly(const CTxDestination &dest)
+{
+        nWalletDBUpdated++;
+        return Erase(make_pair(std::string("watch"), CBitcoinAddress(dest).ToString()));
+}
+
 int64 CWalletDB::GetAccountCreditDebit(const string& strAccount)
 {
     list<CAccountingEntry> entries;
@@ -220,6 +232,19 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                 ssKey >> nNumber;
                 if (nNumber > nAccountingEntryNumber)
                     nAccountingEntryNumber = nNumber;
+            }
+            else if (strType == "watch")
+            {
+                    std::string strAddress;
+                    ssKey >> strAddress;
+                 char fYes;
+                    ssValue >> fYes;
+                    if (fYes == '1')
+                            pwallet->LoadWatchOnly(CBitcoinAddress(strAddress).Get());
+
+                    // Watch-only addresses have no birthday information for now,
+                    // so set the wallet birthday to the beginning of time.
+                    // pwallet->nTimeFirstKey = 1;
             }
             else if (strType == "key" || strType == "wkey")
             {

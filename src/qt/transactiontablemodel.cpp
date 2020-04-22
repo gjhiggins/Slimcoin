@@ -20,12 +20,13 @@
 
 // Amount column is right-aligned it contains numbers
 static int column_alignments[] = {
-        Qt::AlignLeft|Qt::AlignVCenter,
-        Qt::AlignLeft|Qt::AlignVCenter,
-        Qt::AlignLeft|Qt::AlignVCenter,
-        Qt::AlignLeft|Qt::AlignVCenter,
-        Qt::AlignRight|Qt::AlignVCenter
-    };
+        Qt::AlignLeft | Qt::AlignVCenter, /* status */
+        Qt::AlignLeft | Qt::AlignVCenter, /* watchonly */
+        Qt::AlignLeft | Qt::AlignVCenter, /* date */
+        Qt::AlignLeft | Qt::AlignVCenter, /* type */
+        Qt::AlignLeft | Qt::AlignVCenter, /* address */
+        Qt::AlignRight | Qt::AlignVCenter /* amount */
+};
 
 // Comparison operator for sort/binary search of model tx list
 struct TxLessThan
@@ -49,8 +50,8 @@ class TransactionTablePriv
 {
 public:
     TransactionTablePriv(CWallet *wallet, TransactionTableModel *parent):
-            wallet(wallet),
-            parent(parent)
+        wallet(wallet),
+        parent(parent)
     {
     }
     CWallet *wallet;
@@ -129,7 +130,7 @@ public:
 
 #ifdef WALLET_UPDATE_DEBUG
                 qDebug() << "  " << QString::fromStdString(hash.ToString()) << inWallet << " " << inModel
-                        << lowerIndex << "-" << upperIndex;
+                         << lowerIndex << "-" << upperIndex;
 #endif
 
                 if(inWallet && !inModel)
@@ -226,14 +227,16 @@ TransactionTableModel::TransactionTableModel(CWallet* wallet, WalletModel *paren
         walletModel(parent),
         priv(new TransactionTablePriv(wallet, this))
 {
-    columns << QString() << tr("Date") << tr("Type") << tr("Address") << tr("Amount");
+    columns << QString() << QString() << tr("Date") << tr("Type") << tr("Address") << tr("Amount");
 
     priv->refreshWallet();
 
     QTimer *timer = new QTimer(this);
     connect(timer, SIGNAL(timeout()), this, SLOT(update()));
     timer->start(MODEL_UPDATE_DELAY);
+
     connect(walletModel->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
+
 }
 
 TransactionTableModel::~TransactionTableModel()
@@ -419,23 +422,30 @@ QVariant TransactionTableModel::txAddressDecoration(const TransactionRecord *wtx
 
 QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, bool tooltip) const
 {
+    QString watchAddress;
+    if (tooltip) {
+            // Mark transactions involving watch-only addresses by adding " (watch-only)"
+            watchAddress = wtx->involvesWatchAddress ? QString(" (") + tr("watch-only") + QString(")") : "";
+    }
+
     switch(wtx->type)
     {
     case TransactionRecord::RecvFromOther:
-        return QString::fromStdString(wtx->address);
+        return QString::fromStdString(wtx->address) + watchAddress;
+    case TransactionRecord::StakeMint:
+    case TransactionRecord::BurnMint:
     case TransactionRecord::RecvWithAddress:
     case TransactionRecord::SendToAddress:
     case TransactionRecord::Generated:
-    case TransactionRecord::StakeMint:
-        return lookupAddress(wtx->address, tooltip);
+            return lookupAddress(wtx->address, tooltip);
     case TransactionRecord::SendToOther:
-    case TransactionRecord::BurnMint:
-        return QString::fromStdString(wtx->address);
+            return QString::fromStdString(wtx->address) + watchAddress;
     case TransactionRecord::Burned:
         return QString(fTestNet ? "Testnet Burn Address" : "Burn Address");
     case TransactionRecord::SendToSelf:
+        if (wtx->address != "") return lookupAddress(wtx->address, tooltip) + watchAddress;
     default:
-        return tr("(n/a)");
+        return tr("(n/a)") + watchAddress;
     }
 }
 
@@ -520,6 +530,14 @@ QVariant TransactionTableModel::txStatusDecoration(const TransactionRecord *wtx)
     return QColor(0,0,0);
 }
 
+QVariant TransactionTableModel::txWatchonlyDecoration(const TransactionRecord* rec) const
+{
+        if (rec->involvesWatchAddress)
+                return QIcon(":/icons/eye");
+        else
+                return QVariant();
+}
+
 QString TransactionTableModel::formatTooltip(const TransactionRecord *rec) const
 {
     QString tooltip = formatTxStatus(rec) + QString("\n") + formatTxType(rec);
@@ -544,6 +562,8 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         {
         case Status:
             return txStatusDecoration(rec);
+        case Watchonly:
+                return txWatchonlyDecoration(rec);
         case ToAddress:
             return txAddressDecoration(rec);
         }
@@ -551,6 +571,8 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
     case Qt::DisplayRole:
         switch(index.column())
         {
+        case WatchonlyRole:
+            return rec->involvesWatchAddress;
         case Date:
             return formatTxDate(rec);
         case Type:
@@ -567,6 +589,8 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         {
         case Status:
             return QString::fromStdString(rec->status.sortKey);
+        case Watchonly:
+            return (rec->involvesWatchAddress ? 1 : 0);
         case Date:
             return rec->time;
         case Type:
@@ -600,6 +624,10 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
         return rec->type;
     case DateRole:
         return QDateTime::fromTime_t(static_cast<uint>(rec->time));
+    case WatchonlyRole:
+        return rec->involvesWatchAddress;
+    case WatchonlyDecorationRole:
+        return txWatchonlyDecoration(rec);
     case LongDescriptionRole:
         return priv->describe(rec);
     case AddressRole:
@@ -637,6 +665,8 @@ QVariant TransactionTableModel::headerData(int section, Qt::Orientation orientat
             {
             case Status:
                 return tr("Transaction status. Hover over this field to show number of confirmations.");
+            case Watchonly:
+                return tr("Whether or not a watch-only address is involved in this transaction.");
             case Date:
                 return tr("Date and time that the transaction was received.");
             case Type:

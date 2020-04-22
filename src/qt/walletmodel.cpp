@@ -21,6 +21,7 @@ WalletModel::WalletModel(CWallet *wallet, OptionsModel *optionsModel, QObject *p
     cachedBalance(0), cachedReserveBalance(0), cachedUnconfirmedBalance(0), cachedImmatureBalance(0), cachedNumTransactions(0),
     cachedEncryptionStatus(Unencrypted)
 {
+    fHaveWatchOnly = wallet->HaveWatchOnly();
     addressTableModel = new AddressTableModel(wallet, this);
     transactionTableModel = new TransactionTableModel(wallet, this);
 }
@@ -45,17 +46,37 @@ qint64 WalletModel::getUnconfirmedBalance() const
     return wallet->GetUnconfirmedBalance();
 }
 
+qint64 WalletModel::getImmatureBalance() const
+{
+    return wallet->GetImmatureBalance();
+}
+
+bool WalletModel::haveWatchOnly() const
+{
+    return fHaveWatchOnly;
+}
+
+qint64 WalletModel::getWatchBalance() const
+{
+    return wallet->GetWatchOnlyBalance();
+}
+
+qint64 WalletModel::getWatchUnconfirmedBalance() const
+{
+    return wallet->GetUnconfirmedWatchOnlyBalance();
+}
+
+qint64 WalletModel::getWatchImmatureBalance() const
+{
+    return wallet->GetImmatureWatchOnlyBalance();
+}
+
 BurnCoinsBalances WalletModel::getBurnCoinBalances() const
 {
     int64 netBurnCoins, nEffBurnCoins, immatureCoins;
     ::getBurnCoinBalances(netBurnCoins, nEffBurnCoins, immatureCoins);
 
     return BurnCoinsBalances(netBurnCoins, nEffBurnCoins, immatureCoins);
-}
-
-qint64 WalletModel::getImmatureBalance() const
-{
-    return wallet->GetImmatureBalance();
 }
 
 int WalletModel::getNumTransactions() const
@@ -79,8 +100,20 @@ void WalletModel::update()
 
     BurnCoinsBalances newBurnBalances = getBurnCoinBalances();
 
-    if(cachedBalance != newBalance || cachedUnconfirmedBalance != newUnconfirmedBalance || cachedImmatureBalance != newImmatureBalance || cachedBurnCoinsBalances != newBurnBalances)
-        emit balanceChanged(newBalance, getStake(), newUnconfirmedBalance, newImmatureBalance, newReserveBalance, newBurnBalances);
+    qint64 newWatchOnlyBalance = 0;
+    qint64 newWatchUnconfBalance = 0;
+    qint64 newWatchImmatureBalance = 0;
+    if (haveWatchOnly()) {
+        newWatchOnlyBalance = getWatchBalance();
+        newWatchUnconfBalance = getWatchUnconfirmedBalance();
+        newWatchImmatureBalance = getWatchImmatureBalance();
+    }
+
+    if(cachedBalance != newBalance || cachedUnconfirmedBalance != newUnconfirmedBalance || cachedImmatureBalance != newImmatureBalance || cachedWatchOnlyBalance != newWatchOnlyBalance || cachedWatchUnconfBalance != newWatchUnconfBalance || cachedWatchImmatureBalance != newWatchImmatureBalance || cachedBurnCoinsBalances != newBurnBalances)
+        emit balanceChanged(newBalance, getStake(), newUnconfirmedBalance, newImmatureBalance, newWatchOnlyBalance, newWatchUnconfBalance, newWatchImmatureBalance, newReserveBalance, newBurnBalances);
+
+    if(cachedReserveBalance != newReserveBalance)
+        emit reserveBalanceChanged(newReserveBalance);
 
     if(cachedNumTransactions != newNumTransactions)
         emit numTransactionsChanged(newNumTransactions);
@@ -93,11 +126,20 @@ void WalletModel::update()
     cachedImmatureBalance = newImmatureBalance;
     cachedNumTransactions = newNumTransactions;
     cachedBurnCoinsBalances = newBurnBalances;
+    cachedWatchOnlyBalance = newWatchOnlyBalance;
+    cachedWatchUnconfBalance = newWatchUnconfBalance;
+    cachedWatchImmatureBalance = newWatchImmatureBalance;
 }
 
 void WalletModel::updateAddressList()
 {
     addressTableModel->update();
+}
+
+void WalletModel::updateWatchOnlyFlag(bool fHaveWatchonly)
+{
+    fHaveWatchOnly = fHaveWatchonly;
+    Q_EMIT notifyWatchonlyChanged(fHaveWatchonly);
 }
 
 bool WalletModel::validateAddress(const QString &address)
@@ -316,6 +358,12 @@ bool WalletModel::backupWallet(const QString &filename)
     return BackupWallet(*wallet, filename.toLocal8Bit().data());
 }
 
+static void NotifyWatchonlyChanged(WalletModel* walletmodel, bool fHaveWatchonly)
+{
+    QMetaObject::invokeMethod(walletmodel, "updateWatchOnlyFlag", Qt::QueuedConnection,
+        Q_ARG(bool, fHaveWatchonly));
+}
+
 void WalletModel::checkWallet(int& nMismatchSpent, int64& nBalanceInQuestion, int& nOrphansFound)
 {
     wallet->Fix_SpentCoins(nMismatchSpent, nBalanceInQuestion, nOrphansFound, true);
@@ -386,7 +434,7 @@ void WalletModel::getOutputs(const std::vector<COutPoint>& vOutpoints, std::vect
         if (!wallet->mapWallet.count(outpoint.hash)) continue;
         int nDepth = wallet->mapWallet[outpoint.hash].GetDepthInMainChain();
         if (nDepth < 0) continue;
-        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, nDepth);
+        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, nDepth, false);
         vOutputs.push_back(out);
     }
 }
@@ -405,7 +453,7 @@ void WalletModel::listCoins(std::map<QString, std::vector<COutput> >& mapCoins) 
         if (!wallet->mapWallet.count(outpoint.hash)) continue;
         int nDepth = wallet->mapWallet[outpoint.hash].GetDepthInMainChain();
         if (nDepth < 0) continue;
-        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, nDepth);
+        COutput out(&wallet->mapWallet[outpoint.hash], outpoint.n, nDepth, false);
         vCoins.push_back(out);
     }
 
@@ -416,7 +464,7 @@ void WalletModel::listCoins(std::map<QString, std::vector<COutput> >& mapCoins) 
         while (wallet->IsChange(cout.tx->vout[cout.i]) && cout.tx->vin.size() > 0 && wallet->IsMine(cout.tx->vin[0]))
         {
             if (!wallet->mapWallet.count(cout.tx->vin[0].prevout.hash)) break;
-            cout = COutput(&wallet->mapWallet[cout.tx->vin[0].prevout.hash], cout.tx->vin[0].prevout.n, 0);
+            cout = COutput(&wallet->mapWallet[cout.tx->vin[0].prevout.hash], cout.tx->vin[0].prevout.n, 0, true);
         }
 
         CTxDestination address;

@@ -99,6 +99,10 @@ public:
     qint64 getReserveBalance() const;
     qint64 getStake() const;
     qint64 getUnconfirmedBalance() const;
+    bool haveWatchOnly() const;
+    qint64 getWatchBalance() const;
+    qint64 getWatchUnconfirmedBalance() const;
+    qint64 getWatchImmatureBalance() const;
     qint64 getImmatureBalance() const;
     int getNumTransactions() const;
     EncryptionStatus getEncryptionStatus() const;
@@ -114,6 +118,7 @@ public:
                          qint64 fee=0,
                          QString hex=QString()):
             status(status), fee(fee), hex(hex) {}
+
         StatusCode status;
         qint64 fee; // is used in case status is "AmountWithFeeExceedsBalance"
         QString hex; // is filled with the transaction hash if status is "OK"
@@ -155,14 +160,15 @@ public:
 
     UnlockContext requestUnlock();
 
-	bool getPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const;
-	void getOutputs(const std::vector<COutPoint>& vOutpoints, std::vector<COutput>& vOutputs);
-	void listCoins(std::map<QString, std::vector<COutput> >& mapCoins) const;
+    bool getPubKey(const CKeyID &address, CPubKey& vchPubKeyOut) const;
+    void getOutputs(const std::vector<COutPoint>& vOutpoints, std::vector<COutput>& vOutputs);
+    void listCoins(std::map<QString, std::vector<COutput> >& mapCoins) const;
     CWallet * getWallet();
     void clearOrphans();
 
 private:
     CWallet *wallet;
+        bool fHaveWatchOnly;
 
     // Wallet has an options model for wallet-specific options
     // (transaction fee, for example)
@@ -177,12 +183,15 @@ private:
     qint64 cachedUnconfirmedBalance;
     qint64 cachedImmatureBalance;
     qint64 cachedNumTransactions;
+    qint64 cachedWatchOnlyBalance;
+    qint64 cachedWatchUnconfBalance;
+    qint64 cachedWatchImmatureBalance;
     EncryptionStatus cachedEncryptionStatus;
     BurnCoinsBalances cachedBurnCoinsBalances;
 
 signals:
     // Signal that balance in wallet changed
-    void balanceChanged(qint64 balance, qint64 stake, qint64 unconfirmedBalance, qint64 immatureBalance, qint64 reserveBalance, BurnCoinsBalances cachedBurnCoinsBalances);
+    void balanceChanged(qint64 balance, qint64 stake, qint64 unconfirmedBalance, qint64 immatureBalance, qint64 watchOnlyBalance, qint64 watchUnconfBalance, qint64 watchImmatureBalance, qint64 reserveBalance, BurnCoinsBalances cachedBurnCoinsBalances);
 
     // Number of transactions in wallet changed
     void numTransactionsChanged(int count);
@@ -201,9 +210,14 @@ signals:
     // Asynchronous error notification
     void error(const QString &title, const QString &message, bool modal);
 
-public slots:
-    void update();
-    void updateAddressList();
+    // Watch-only address added
+    void notifyWatchonlyChanged(bool fHaveWatchonly);
+
+    public slots:
+        void update();
+        void updateAddressList();
+        /* Watch-only added */
+        void updateWatchOnlyFlag(bool fHaveWatchonly);
 };
 
 

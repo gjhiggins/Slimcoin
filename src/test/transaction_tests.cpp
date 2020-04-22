@@ -26,12 +26,15 @@ using namespace json_spirit;
 // using namespace boost::algorithm;
 
 struct F {
-    F() : i( 0 ) { 
-                    // BOOST_TEST_MESSAGE( "Tx fixture setup" );
-                }
-    ~F()         {
-                    // BOOST_TEST_MESSAGE( "Tx fixture teardown" );
-                }
+    F() : i( 0 )
+     { 
+        // BOOST_TEST_MESSAGE( "Tx fixture setup" );
+     }
+
+    ~F() 
+    {
+        // BOOST_TEST_MESSAGE( "Tx fixture teardown" );
+    }
     void setup() {
         static map<string, unsigned int> mapFlagNames = boost::assign::map_list_of
             (string("NONE"),(unsigned int)SCRIPT_VERIFY_NONE)

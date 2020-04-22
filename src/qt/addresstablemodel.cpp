@@ -51,7 +51,7 @@ public:
     AddressTableModel *parent;
 
     AddressTablePriv(CWallet *wallet, AddressTableModel *parent):
-            wallet(wallet), parent(parent) {}
+                     wallet(wallet), parent(parent) {}
 
     void refreshAddressTable()
     {
@@ -364,7 +364,7 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
         // Check for duplicate addresses
         {
             LOCK(wallet->cs_wallet);
-            if(wallet->mapAddressBook.count(CBitcoinAddress(strAddress).Get()))
+            if (wallet->mapAddressBook.count(CBitcoinAddress(strAddress).Get()))
             {
                 editStatus = DUPLICATE_ADDRESS;
                 return QString();
