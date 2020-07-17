@@ -4595,6 +4595,18 @@ bool ClientAllowed(const string& strAddress)
     return false;
 }
 
+// Boost Support for 1.70+
+#if BOOST_VERSION >= 107000
+    #define GetIOService(s) ((boost::asio::io_context&)(s).get_executor().context())
+    // #define GetIOServiceFromPtr(s) ((boost::asio::io_context&)(s->get_executor().context())) // this one
+    typedef boost::asio::io_context ioContext;
+#else
+    #define GetIOService(s) ((s).get_io_service())
+    // #define GetIOServiceFromPtr(s) ((s)->get_io_service())
+    typedef boost::asio::io_service ioContext;
+#endif
+
+
 //
 // IOStream device that speaks SSL but can also speak non-SSL
 //
@@ -4626,7 +4638,7 @@ public:
     }
     bool connect(const std::string& server, const std::string& port)
     {
-        ip::tcp::resolver resolver(stream.get_io_service());
+        ip::tcp::resolver resolver(GetIOService(stream));
         ip::tcp::resolver::query query(server.c_str(), port.c_str());
         ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
         ip::tcp::resolver::iterator end;
